@@ -1,8 +1,12 @@
 # Data
 data
+chromadb
 
 # Python cache
 __pycache__
+
+# Environment File
+.env
 
 # Personal Notes
 notes.txt
