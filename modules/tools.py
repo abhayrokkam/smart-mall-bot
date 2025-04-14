@@ -9,7 +9,7 @@ def find_similar_shops(query: str):
         query (str): A text query used to find semantically similar shop entries.
 
     Returns:
-        List[str]: A list of up to 4 shop document strings that are most similar to the query.
+        List[str]: A list of up to 7 shop document strings that are most similar to the query.
     """    
     embed_model = OpenAIEmbeddings(model='text-embedding-3-small')
     vectordb = Chroma(
@@ -17,6 +17,6 @@ def find_similar_shops(query: str):
         embedding_function=embed_model,
         persist_directory="./chromadb")
     
-    results = vectordb.similarity_search(query, k=4)
+    results = vectordb.similarity_search(query, k=10)
 
     return [result.page_content for result in results]
