@@ -68,8 +68,8 @@ class MallAssistant():
             return {"context": context}
 
         def generate(state: State):
-            messages = prompt_template.invoke({"question": state["question"], "context": state['context']})
-            response = llm.invoke(messages)
+            prompt = prompt_template.invoke({"question": state["question"], "context": state['context']})
+            response = llm.invoke(prompt)
             
             return {"answer": response.content}
 
