@@ -11,5 +11,5 @@ __pycache__
 # Personal Notes
 notes.txt
 
-# API
-main.py
+# Logs
+*.log*

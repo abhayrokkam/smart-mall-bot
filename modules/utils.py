@@ -1,11 +1,14 @@
 import os
 import json
+import logging
 
 from dotenv import load_dotenv
 load_dotenv()
 
 import chromadb
 from langchain_openai import OpenAIEmbeddings
+
+logger = logging.getLogger(__name__)
 
 def cleaning_json_files(data_folder):
     """
@@ -37,7 +40,11 @@ def cleaning_json_files(data_folder):
         KeyError: If expected keys are missing in the JSON structure.
     """
     # List all JSON files in the folder
-    json_files = os.listdir(data_folder)
+    try:
+        json_files = os.listdir(data_folder)
+    except FileNotFoundError:
+        logger.error(f"Data folder not found: {data_folder}")
+        raise
 
     # Shops list
     shops = []
@@ -45,41 +52,53 @@ def cleaning_json_files(data_folder):
     # Read each JSON file
     for file_name in json_files:
         file_path = os.path.join(data_folder, file_name)
-        with open(file_path, 'r') as file:
-            data = json.load(file)
-            for datapoint in data['docs']:
-                # Extracting shop details one-by-one
-                store = {}
-                store['title'] = datapoint['title']
-                
-                # Filtering categories and subcategories
-                categories = []
-                subcategories = []
-                for category in datapoint['categoryTree']:
-                    categories.append(category['title'])
+        logger.debug(f"Processing file: {file_path}")
+        try:
+            with open(file_path, 'r') as file:
+                data = json.load(file)
+                for datapoint in data['docs']:
+                    # Extracting shop details one-by-one
+                    store = {}
+                    store['title'] = datapoint['title']
                     
-                    for sub in category['subs']:
-                        subcategories.append(sub['title'])
+                    # Filtering categories and subcategories
+                    categories = []
+                    subcategories = []
+                    for category in datapoint['categoryTree']:
+                        categories.append(category['title'])
+                        
+                        for sub in category['subs']:
+                            subcategories.append(sub['title'])
+                        
+                    store['categories'] = categories
+                    store['subcategories'] = subcategories
                     
-                store['categories'] = categories
-                store['subcategories'] = subcategories
-                
-                # Storing venue
-                store['venue'] = datapoint['venue']
-                
-                # Filtering and storing keywords as list
-                keywords = []
-                keywords_str = datapoint['keywords']
-                for keyword in keywords_str.split(','):
-                    if(keyword != '' and keyword != '&'):
-                        keywords.append(keyword)
-                store['keywords'] = keywords
-                
-                # Storing description of shop
-                store['description'] = datapoint['text']
-                
-                shops.append(store)
-                
+                    # Storing venue
+                    store['venue'] = datapoint['venue']
+                    
+                    # Filtering and storing keywords as list
+                    keywords = []
+                    keywords_str = datapoint['keywords']
+                    for keyword in keywords_str.split(','):
+                        if(keyword != '' and keyword != '&'):
+                            keywords.append(keyword)
+                    store['keywords'] = keywords
+                    
+                    # Storing description of shop
+                    store['description'] = datapoint['text']
+                    
+                    shops.append(store)
+        except json.JSONDecodeError as jde:
+            logger.error(f"Error decoding JSON from file {file_path}: {jde}")
+            continue # Skip corrupted files or handle differently
+        except KeyError as ke:
+            logger.error(f"Missing expected key in file {file_path}: {ke}")
+            continue # Skip files with unexpected structure
+        except Exception as e:
+            logger.error(f"Unexpected error processing file {file_path}: {e}", exc_info=True)
+            continue
+    
+    logger.info(f"Finished JSON cleaning. Extracted data for {len(shops)} shops.")  
     return shops
 
 def push_to_chroma(data_path,
@@ -102,65 +121,73 @@ def push_to_chroma(data_path,
         - Uses OpenAI's 'text-embedding-3-small' model for embedding.
         - Document content is formatted for readability; embeddings use a simplified input.
     """
-    client = chromadb.PersistentClient(path=persist_path)
-    model = OpenAIEmbeddings(model='text-embedding-3-small')
-    collection_name = "shops"
+    logger.info(f"Starting push to ChromaDB from data path: {data_path}, persist path: {persist_path}")
     
     # Collection
     try:
+        client = chromadb.PersistentClient(path=persist_path)
+        model = OpenAIEmbeddings(model='text-embedding-3-small')
+        collection_name = "shops"
+        
         collection = client.get_or_create_collection(name=collection_name)
+        
+        # Load shop data
+        logger.debug(f"Loading shop data from: {data_path}")
+        with open(data_path, 'r') as f:
+            shops = json.load(f)
+        logger.info(f"Loaded {len(shops)} shop entries from {data_path}")
+        
+        # Lists for collection
+        ids = []
+        documents = []
+        documents_for_embeddings = []
+        metadatas = []
+
+        for shop in shops:
+            # Ids
+            ids.append(f'{shop['title']} | {shop['venue']}')
+            
+            # Documents
+            content = f"""
+            Title: {shop['title']}
+            Venue: {shop['venue']}
+            Categories: {', '.join(shop['categories'])}
+            Subcategories: {', '.join(shop.get('subcategories', []))}
+            Keywords: {', '.join(shop['keywords'])}
+            Description: {shop['description']}
+            """
+            documents.append(content)
+            
+            # Documents uniquely for creating embeddings
+            parts = []
+            parts.append(shop['title'])
+            parts.append(", ".join(shop['categories']))
+            parts.append(", ".join(shop['subcategories']))
+            parts.append(", ".join(shop['keywords']))
+            documents_for_embeddings.append(" | ".join(parts))
+            
+            # Metadata of documents
+            metadata={
+                'title': shop['title'],
+                'categories': ', '.join(shop['categories']),
+                'subcategories': ', '.join(shop['subcategories']),
+                'venue': shop['venue'],
+            }
+            metadatas.append(metadata)
+
+        # Embeddings 
+        embeddings = model.embed_documents(documents_for_embeddings)
+        logger.info(f"Generated {len(embeddings)} embeddings.")
+        
+        # Add to collection
+        logger.info(f"Adding {len(ids)} documents to ChromaDB collection '{collection_name}'")
+        collection.add(
+            ids=ids,
+            documents=documents,
+            metadatas=metadatas,
+            embeddings=embeddings
+        )
+        logger.info("Successfully added data to ChromaDB.")
     except Exception as e:
-        print(f"Error creating or getting collection: {e}")
-        
-    # Load shop data
-    with open(data_path, 'r') as f:
-        shops = json.load(f)
-    
-    # Lists for collection
-    ids = []
-    documents = []
-    documents_for_embeddings = []
-    metadatas = []
-
-    for shop in shops:
-        # Ids
-        ids.append(f'{shop['title']} | {shop['venue']}')
-        
-        # Documents
-        content = f"""
-        Title: {shop['title']}
-        Venue: {shop['venue']}
-        Categories: {', '.join(shop['categories'])}
-        Subcategories: {', '.join(shop.get('subcategories', []))}
-        Keywords: {', '.join(shop['keywords'])}
-        Description: {shop['description']}
-        """
-        documents.append(content)
-        
-        # Documents uniquely for creating embeddings
-        parts = []
-        parts.append(shop['title'])
-        parts.append(", ".join(shop['categories']))
-        parts.append(", ".join(shop['subcategories']))
-        parts.append(", ".join(shop['keywords']))
-        documents_for_embeddings.append(" | ".join(parts))
-        
-        # Metadata of documents
-        metadata={
-            'title': shop['title'],
-            'categories': ', '.join(shop['categories']),
-            'subcategories': ', '.join(shop['subcategories']),
-            'venue': shop['venue'],
-        }
-        metadatas.append(metadata)
-
-    # Embeddings 
-    embeddings = model.embed_documents(documents_for_embeddings)
-    
-    # Add to collection
-    collection.add(
-        ids=ids,
-        documents=documents,
-        metadatas=metadatas,
-        embeddings=embeddings
-    )
+        logger.exception(f"Error during push_to_chroma from {data_path}: {e}") 
+        raise 

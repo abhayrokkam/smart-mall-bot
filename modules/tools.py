@@ -1,5 +1,8 @@
+import logging
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
+
+logger = logging.getLogger(__name__)
 
 def find_similar_shops(query: str):
     """
@@ -10,7 +13,9 @@ def find_similar_shops(query: str):
 
     Returns:
         List[str]: A list of up to 7 shop document strings that are most similar to the query.
-    """    
+    """
+    logger.info(f"Performing similarity search for query: {query[:50]}...")
+    
     embed_model = OpenAIEmbeddings(model='text-embedding-3-small')
     vectordb = Chroma(
         collection_name='shops',
@@ -18,5 +23,6 @@ def find_similar_shops(query: str):
         persist_directory="./chromadb")
     
     results = vectordb.similarity_search(query, k=10)
+    logger.info(f"Found {len(results)} similar shops for query.")
 
     return [result.page_content for result in results]
