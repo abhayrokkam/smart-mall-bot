@@ -7,6 +7,8 @@ from langgraph.graph import START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.checkpoint.memory import MemorySaver
 
+from sentence_transformers import CrossEncoder
+
 from typing_extensions import Annotated, TypedDict, Dict
 from operator import add
 
@@ -18,26 +20,36 @@ logger = logging.getLogger(__name__)
 
 class MallAssistant():
     """
-    A virtual assistant for answering queries using a language model and a prompt-based flow graph.
-    
-    This class utilizes a pre-defined prompt template and a language model to process user queries 
-    and return intelligent responses. It is designed for use cases such as guiding users in a mall environment.
+    A virtual assistant that utilizes a language model and a prompt-based flow graph 
+    to answer user queries, particularly for use in mall guidance scenarios.
+
+    Attributes:
+        graph (CompiledStateGraph): The compiled flow graph used to process queries 
+            through retrieval, response generation, and history maintenance steps.
     """
     def __init__(self,
-                 llm_model_name: str = 'gpt-4o-mini'):
+                 llm_model_name: str = 'gpt-4o-mini',
+                 reranker_model_name: str = 'cross-encoder/ms-marco-MiniLM-L6-v2'):
         """
-        Initializes the MallAssistant with a language model and a prompt-based flow graph.
+        Initializes the MallAssistant by setting up the prompt template, language model, 
+        reranker, and compiling the state graph used for processing queries.
 
-        Sets up the prompt template with required input variables and loads a lightweight GPT-4 model.
-        Constructs the flow graph that will be used to handle user queries.
+        Args:
+            llm_model_name (str): The name of the language model to use. Defaults to 'gpt-4o-mini'.
+            reranker_model_name (str): The name of the reranker model for reordering retrieved 
+                documents. Defaults to 'cross-encoder/ms-marco-MiniLM-L6-v2'.
+
+        Raises:
+            Exception: If initialization of the graph or any components fails.
         """
         logger.info(f"Initializing MallAssistant with model: {llm_model_name}")
         try:
             prompt_template = PromptTemplate(input_variables=["context", "question"], 
                                             template=sam_prompt_template)
             llm = ChatOpenAI(model_name=llm_model_name)
-            
-            self.graph = self._init_llm_graph(prompt_template=prompt_template, llm=llm)
+            reranker = CrossEncoder(reranker_model_name)
+
+            self.graph = self._init_llm_graph(prompt_template=prompt_template, llm=llm, reranker=reranker)
             logger.info("LLM graph initialized successfully.")
         except Exception as e:
             logger.exception("Error during MallAssistant initialization.")
@@ -45,28 +57,23 @@ class MallAssistant():
     
     def _init_llm_graph(self,
                         prompt_template: PromptTemplate,
-                        llm: ChatOpenAI) -> CompiledStateGraph:
+                        llm: ChatOpenAI,
+                        reranker: CrossEncoder) -> CompiledStateGraph:
         """
-        Initializes and compiles a stateful LLM graph for context retrieval, 
-        response generation, and conversation history tracking.
+        Initializes and compiles the LLM graph used for processing user queries.
+
+        The graph follows a three-step pipeline:
+        1. Retrieve relevant context using semantic similarity and reranking.
+        2. Generate an answer based on the retrieved context using the language model.
+        3. Maintain the history of the conversation.
 
         Args:
-            prompt_template (PromptTemplate): A template used to format the prompt 
-                with the user's question and retrieved context.
-            llm (ChatOpenAI): An instance of a ChatOpenAI model used to generate responses.
+            prompt_template (PromptTemplate): The template used to structure prompts for the language model.
+            llm (ChatOpenAI): The language model instance used to generate responses.
+            reranker (CrossEncoder): The reranker used to reorder retrieved context documents by relevance.
 
         Returns:
-            CompiledStateGraph: A compiled graph that handles the flow of retrieving 
-            context, generating a response, and maintaining message history.
-
-        Notes:
-            - The state includes `question`, `context`, `answer`, and a message history (`messages`).
-            - The graph consists of three nodes:
-                1. `retrieve`: Finds context relevant to the user's question using `find_similar_shops`.
-                2. `generate`: Uses the prompt template and context to query the LLM.
-                3. `history`: Stores the user question and generated answer as message objects.
-            - The graph is checkpointed using `MemorySaver` to preserve state transitions.
-            - Execution flow: START → retrieve → generate → history.
+            CompiledStateGraph: The compiled flow graph for handling queries.
         """
         logger.info("Initializing LLM graph components.")
         memory = MemorySaver()
@@ -78,17 +85,44 @@ class MallAssistant():
             answer: str
 
         def retrieve(state: State):
+            """
+            Retrieves relevant context documents for the user's question using similarity search 
+            and reranking.
+
+            Args:
+                state (State): Contains the user's question.
+
+            Returns:
+                dict: Retrieved context under the key 'context'.
+            """
             logger.debug(f"Retrieving context for question: {state['question'][:50]}...")
             try:
-                retrieved_info = find_similar_shops(state['question'])
-                context = " \n ".join(retrieved_info)
-                logger.info(f"Retrieved {len(retrieved_info)} context snippets.")
+                retrieved_docs = find_similar_shops(state['question'])
+
+                # Reranking
+                pairs = [(state['question'], doc) for doc in retrieved_docs]
+                scores = reranker.predict(pairs)
+
+                sorted_docs = sorted(zip(scores, retrieved_docs), reverse=True)
+                relevant_shops = [doc[1] for doc in sorted_docs[:10]]
+
+                context = " \n ".join(relevant_shops)
+                logger.info(f"Retrieved relevant shops and combined to context.")
                 return {"context": context}
             except Exception as e:
                 logger.error(f"Error during context retrieval: {e}", exc_info=True)
                 return {"context": ""}
 
         def generate(state: State):
+            """
+            Generates an answer using the language model based on the question and retrieved context.
+
+            Args:
+                state (State): Includes the user's question and context.
+
+            Returns:
+                dict: Generated answer under the key 'answer'.
+            """
             logger.debug("Generating response based on context.")
             try:
                 prompt = prompt_template.invoke({"question": state["question"], "context": state['context']})
@@ -100,6 +134,15 @@ class MallAssistant():
                 return {"answer": "Sorry, I encountered an error while generating the response."}
         
         def maintain_history(state: State):
+            """
+            Updates the conversation history with the latest question and answer.
+
+            Args:
+                state (State): Contains the question and generated answer.
+
+            Returns:
+                dict: Updated messages under the key 'messages'.
+            """
             logger.debug("Maintaining conversation history.")
             human_message = HumanMessage(state["question"])
             ai_message = AIMessage(state["answer"])

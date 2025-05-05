@@ -153,7 +153,6 @@ def push_to_chroma(data_path,
             Venue: {shop['venue']}
             Categories: {', '.join(shop['categories'])}
             Subcategories: {', '.join(shop.get('subcategories', []))}
-            Keywords: {', '.join(shop['keywords'])}
             Description: {shop['description']}
             """
             documents.append(content)

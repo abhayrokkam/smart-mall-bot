@@ -9,7 +9,7 @@ __pycache__
 .env
 
 # Personal Notes
-notes.txt
+updates.txt
 
 # Logs
 *.log*

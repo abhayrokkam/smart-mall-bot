@@ -7,3 +7,5 @@ langchain_chroma
 langgraph
 dotenv
 chromadb
+sentence-transformers
+hf_xet

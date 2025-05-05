@@ -22,7 +22,7 @@ def find_similar_shops(query: str):
         embedding_function=embed_model,
         persist_directory="./chromadb")
     
-    results = vectordb.similarity_search(query, k=10)
+    results = vectordb.similarity_search(query, k=20)
     logger.info(f"Found {len(results)} similar shops for query.")
 
     return [result.page_content for result in results]
