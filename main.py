@@ -83,9 +83,11 @@ def get_chat_history(thread_id: str):
     """
     logger.info(f"Received request for chat history for thread_id: {thread_id}")
     try:
-        config = {"thread_id": thread_id}
+        config = {"configurable":
+                  {'thread_id': thread_id}
+                }
         result = assistant.graph.get_state(config)
-        messages = result.get("messages", [])
+        messages = result.values.get("messages", [])
         logger.info(f"Successfully retrieved chat history for thread_id: {thread_id}")
         
         return {
