@@ -14,6 +14,7 @@ from operator import add
 
 from modules.tools import find_similar_shops
 from modules.prompts import sam_prompt_template
+from modules.utils import messages_to_string
 
 # Logger
 logger = logging.getLogger(__name__)
@@ -125,7 +126,10 @@ class MallAssistant():
             """
             logger.debug("Generating response based on context.")
             try:
-                prompt = prompt_template.invoke({"question": state["question"], "context": state['context']})
+                # Ingesting conversation history
+                history_str = messages_to_string(state['messages'][-6:]) if len(state['messages']) >= 6 else messages_to_string(state['messages'])
+
+                prompt = prompt_template.invoke({"question": state["question"], "history": history_str, "context": state['context']})
                 response = llm.invoke(prompt)
                 logger.info("LLM response generated successfully.")
                 return {"answer": response.content}

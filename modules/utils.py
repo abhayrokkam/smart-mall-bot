@@ -1,4 +1,3 @@
-import os
 import json
 import logging
 
@@ -7,99 +6,9 @@ load_dotenv()
 
 import chromadb
 from langchain_openai import OpenAIEmbeddings
+from langchain_core.messages import HumanMessage, AIMessage
 
 logger = logging.getLogger(__name__)
-
-def cleaning_json_files(data_folder):
-    """
-    Reads and processes JSON files from the specified folder, extracting relevant shop data.
-
-    This function iterates through all JSON files in the given directory, parses each file,
-    and extracts information about shops including title, categories, subcategories, venue,
-    keywords, and description. The extracted data from each shop is stored in a dictionary
-    and added to a list, which is returned at the end.
-
-    Args:
-        data_folder (str): The path to the folder containing the JSON files.
-
-    Returns:
-        list[dict]: A list of dictionaries, where each dictionary contains the extracted
-            information for a shop. Each dictionary has the following structure:
-            {
-                'title': str,
-                'categories': list[str],
-                'subcategories': list[str],
-                'venue': str,
-                'keywords': list[str],
-                'description': str
-            }
-
-    Raises:
-        FileNotFoundError: If the specified folder does not exist.
-        json.JSONDecodeError: If any JSON file is not properly formatted.
-        KeyError: If expected keys are missing in the JSON structure.
-    """
-    # List all JSON files in the folder
-    try:
-        json_files = os.listdir(data_folder)
-    except FileNotFoundError:
-        logger.error(f"Data folder not found: {data_folder}")
-        raise
-
-    # Shops list
-    shops = []
-
-    # Read each JSON file
-    for file_name in json_files:
-        file_path = os.path.join(data_folder, file_name)
-        logger.debug(f"Processing file: {file_path}")
-        try:
-            with open(file_path, 'r') as file:
-                data = json.load(file)
-                for datapoint in data['docs']:
-                    # Extracting shop details one-by-one
-                    store = {}
-                    store['title'] = datapoint['title']
-                    
-                    # Filtering categories and subcategories
-                    categories = []
-                    subcategories = []
-                    for category in datapoint['categoryTree']:
-                        categories.append(category['title'])
-                        
-                        for sub in category['subs']:
-                            subcategories.append(sub['title'])
-                        
-                    store['categories'] = categories
-                    store['subcategories'] = subcategories
-                    
-                    # Storing venue
-                    store['venue'] = datapoint['venue']
-                    
-                    # Filtering and storing keywords as list
-                    keywords = []
-                    keywords_str = datapoint['keywords']
-                    for keyword in keywords_str.split(','):
-                        if(keyword != '' and keyword != '&'):
-                            keywords.append(keyword)
-                    store['keywords'] = keywords
-                    
-                    # Storing description of shop
-                    store['description'] = datapoint['text']
-                    
-                    shops.append(store)
-        except json.JSONDecodeError as jde:
-            logger.error(f"Error decoding JSON from file {file_path}: {jde}")
-            continue # Skip corrupted files or handle differently
-        except KeyError as ke:
-            logger.error(f"Missing expected key in file {file_path}: {ke}")
-            continue # Skip files with unexpected structure
-        except Exception as e:
-            logger.error(f"Unexpected error processing file {file_path}: {e}", exc_info=True)
-            continue
-    
-    logger.info(f"Finished JSON cleaning. Extracted data for {len(shops)} shops.")  
-    return shops
 
 def push_to_chroma(data_path,
                    persist_path = './chromadb'):
@@ -189,4 +98,40 @@ def push_to_chroma(data_path,
         logger.info("Successfully added data to ChromaDB.")
     except Exception as e:
         logger.exception(f"Error during push_to_chroma from {data_path}: {e}") 
-        raise 
+        raise
+
+def messages_to_string(messages: list) -> str:
+    """
+    Converts a list of HumanMessage and AIMessage objects into a formatted string.
+
+    Each HumanMessage is labeled as "visitor:", and each AIMessage is labeled as "assistant:".
+    Messages are separated by newlines.
+
+    Args:
+        messages (list): A list containing HumanMessage and AIMessage objects.
+
+    Returns:
+        str: A formatted string representation of the message list. Returns an empty string if no messages are provided.
+    """
+    if not messages: 
+        logger.info("Received empty message list, returning empty string.")
+        return ""
+
+    logger.info(f"Formatting messages into string")
+    lines = []
+    
+    for message in messages:
+        try:
+            if isinstance(message, HumanMessage):
+                lines.append(f"visitor:\n{message.content}")
+            elif isinstance(message, AIMessage):
+                lines.append(f"assistant:\n{message.content}")
+            else:
+                logger.warning(f"Skipped unsupported message type: {type(message).__name__}")
+        except Exception as e:
+            logger.error(f"Error processing message: {e}")
+            continue
+    
+    result = "\n".join(lines)
+    logger.info(f"Messages formatted to string")
+    return result
