@@ -1,103 +1,153 @@
-# AI Mall Assistant: Smart Navigation & Recommendations
 
-## Introduction 
+# SMART MALL ASSISTANT
 
-Welcome to the AI Mall Assistant project, designed to enhance the visitor experience in large shopping malls through an intelligent chatbot interface.
+A production-grade, AI-powered digital concierge designed to serve real-time, context-aware assistance to visitors of Sunway Pyramid Mall. This project demonstrates advanced natural language processing, semantic search, and modular backend orchestration — tailored for large-scale commercial deployments.
 
-This assistant employs a Large Language Model (LLM) to handle natural language interaction and query processing. The LLM interfaces with a structured knowledge base detailing specific mall information, including:
-    - Store directories (names, categories, keywords)
-    - Spatial layout data (floor plans, relative locations)
+Built using **FastAPI**, **OpenAI embeddings**, and **Chroma vector search**, the system supports intelligent retrieval and dialogue management, enabling users to find shops and services through natural language queries in a kiosk or digital assistant environment.
 
-By processing user queries against this mall data via the LLM, the chatbot provides:
+- [SMART MALL ASSISTANT](#smart-mall-assistant)
+  - [Project Objectives](#project-objectives)
+  - [Core Features](#core-features)
+    - [Conversational Intelligence with Domain Context](#conversational-intelligence-with-domain-context)
+    - [Semantic Search Engine with Embedding Matching](#semantic-search-engine-with-embedding-matching)
+    - [Modular Data Ingestion Pipeline](#modular-data-ingestion-pipeline)
+    - [Scalable Backend Architecture](#scalable-backend-architecture)
+    - [Logging and Observability](#logging-and-observability)
+  - [Architecture Overview](#architecture-overview)
+    - [1. Data Layer](#1-data-layer)
+    - [2. AI Orchestration Layer](#2-ai-orchestration-layer)
+    - [3. API Layer](#3-api-layer)
+  - [Project Structure](#project-structure)
+  - [Real-World Use Case](#real-world-use-case)
+  - [Technology and Skills Demonstrated](#technology-and-skills-demonstrated)
+    - [Artificial Intelligence](#artificial-intelligence)
+    - [Software Engineering](#software-engineering)
+    - [Backend Infrastructure](#backend-infrastructure)
+  - [Requirements](#requirements)
 
-- AI-Powered Navigation: Translates natural language requests into navigational guidance within the mall context.
-- Intelligent Recommendations: Filters and retrieves relevant shops, restaurants, or services from the knowledge base based on user needs expressed conversationally.
+## Project Objectives
 
-The primary goal is to deliver a robust and efficient system for real-time mall navigation assistance and personalized recommendations, leveraging the integration of an LLM with specific domain data.
+The core goal of this assistant is to provide a **highly responsive, intelligent, and scalable interface** that allows mall visitors to interact with a kiosk or app as if speaking with a human concierge. It addresses common real-world challenges such as:
 
-- [AI Mall Assistant: Smart Navigation \& Recommendations](#ai-mall-assistant-smart-navigation--recommendations)
-  - [Introduction](#introduction)
-  - [System Information](#system-information)
-  - [Workflow](#workflow)
-    - [Query Input](#query-input)
-    - [Context Retrieval](#context-retrieval)
-    - [Prompt Construction](#prompt-construction)
-    - [LLM Generation](#llm-generation)
-    - [Response Output](#response-output)
-  - [Guide to Code](#guide-to-code)
-    - [Install Dependencies](#install-dependencies)
-    - [Create a Vector Database](#create-a-vector-database)
-    - [Send Queries](#send-queries)
+- Efficiently locating shops based on vague or open-ended descriptions.
+- Maintaining dialogue context across multiple user interactions.
+- Providing domain-specific responses grounded in an up-to-date knowledge base.
 
-## System Information
+This implementation is optimized for real-world usage in environments with heavy foot traffic, diverse visitor intents, and a broad range of retail services.
 
-- **Data Processing & Storage**
-   - Mall information (shop details, categories, descriptions, keywords, venue) is expected in JSON format located within the `data/` directory.
-   - The `utils.py` module contains functions responsible for parsing these JSON files and extracting relevant shop attributes.
-   - Processed shop data is then embedded using OpenAI's `text-embedding-3-small` model.
-   - These embeddings, along with associated metadata, are stored persistently in a ChromaDB vector database, with data files located in the `chromadb/` directory.
+## Core Features
 
-- **Retrieval**
-    - The `tools.py` module defines functions that perform semantic similarity searches against the ChromaDB 'shops' collection.
-    - Given a user query, this component retrieves the most relevant shop information from the vector database to be used as context.
+### Conversational Intelligence with Domain Context
 
-- **LLM Engine**
-    - The `engine.py` module orchestrates the core RAG workflow, likely using a state graph.
-    - It takes a user query, triggers the retrieval step, formats the query and retrieved context using templates defined in `prompts.py`, and then generates a response.
-    - The primary Large Language Model used for generation is `gpt-4-turbo` accessed via the `ChatOpenAI` integration.
+- Designed around a persona-driven prompt to simulate a knowledgeable mall assistant named *Sam*.
+- Responses are generated with **LLM prompting strategies** that encourage helpfulness, completeness, and consistency.
+- Multi-turn dialogue support via **threaded conversation memory** powered by LangChain’s message abstraction.
 
-- **Configuration**
-    - Sensitive information, such as API keys, should be managed via environment variables stored in the `.env` file.
+### Semantic Search Engine with Embedding Matching
 
-## Workflow
+- Embeds incoming user queries and shop data using **OpenAI’s `text-embedding-3-small` model**.
+- Executes **semantic similarity search** against a local **ChromaDB** vector index.
+- Returns results that are meaningfully related to user intent, rather than relying on exact keyword matches.
 
-### Query Input
-   - The user submits a natural language query to the AI Mall Assistant (e.g., "Where can I find a coffee shop near the entrance?", "Suggest a store for buying sportswear").
+### Modular Data Ingestion Pipeline
 
-### Context Retrieval
+- Accepts structured `.json` files representing store data and ingests them into the system dynamically.
+- Prepares multiple textual variations of metadata fields for robust embedding accuracy.
+- Automatically generates document IDs and stores metadata alongside embeddings for future reference.
 
-   - The query is used to perform a semantic search against the ChromaDB vector store.
-   - The most relevant shop information based on the query's meaning is retrieved from ChromaDB.
+### Scalable Backend Architecture
 
-### Prompt Construction
+- Built with **FastAPI**, enabling clean API exposure and efficient routing.
+- Fully asynchronous request handling for high concurrency under user load.
+- Structured logging with `RotatingFileHandler` to capture critical application events and diagnostics.
 
-   - A predefined prompt template is populated with the original user query and the context retrieved in the previous step.
-   - This structured prompt prepares the information for the Language Model, instructing it on how to generate the desired response using the provided context.
+### Logging and Observability
 
-### LLM Generation
+- Centralized logging architecture implemented via `logging_config.py`.
+- Logs all operations from API calls to vector search results, aiding in debugging and monitoring in production environments.
 
-   - The complete, formatted prompt is sent to the configured Large Language Model.
-   - The LLM processes the input, synthesizing the retrieved context to generate a coherent and helpful answer tailored to the user's original query.
+## Architecture Overview
 
-###  Response Output
+The system consists of three main functional layers:
 
-   - The final generated text response from the LLM is returned to the user, providing the requested navigation guidance or shop recommendation.
+### 1. Data Layer
+Handles ingestion and persistent storage of domain knowledge:
 
+- Converts raw shop metadata into embedded vector format.
+- Stores vectors in **ChromaDB** for low-latency, high-relevance similarity search.
+- Enables dynamic updates by re-ingesting modified `.json` files without full re-deployment.
 
+### 2. AI Orchestration Layer
+Implements logic for processing and responding to user queries:
 
-## Guide to Code
+- Routes messages through the `MallAssistant` engine (`engine.py`).
+- Maintains session state and historical memory using `thread_id` tracking.
+- Conducts vector retrieval via `tools.py` and composes final responses with context-aware prompt injection.
 
-### Install Dependencies
+### 3. API Layer
+Exposes endpoints through FastAPI for:
+
+- Uploading new shop data
+- Interacting with the assistant
+- Retrieving historical dialogue sessions
+
+All endpoints are documented in the source code and follow RESTful principles.
+
+## Project Structure
 
 ```
-pip install -r requirements.txt
+.
+├── main.py                         # FastAPI app and API routing
+├── chromadb/                       # Local vector DB storage (persisted embeddings)
+└── modules/
+    ├── engine.py                   # MallAssistant orchestration logic
+    ├── tools.py                    # Vector similarity search using ChromaDB
+    ├── utils.py                    # Embedding and document processing pipeline
+    ├── prompts.py                  # Persona-driven assistant prompt
+    ├── logging_config.py           # Logging setup (file and console handlers)
 ```
 
-### Create a Vector Database
+## Real-World Use Case
 
-This facilitates to upload the data from `shops.json` to a vector store, which is persisted locally as a folder.
+This assistant is designed to simulate a **smart kiosk system** in a large shopping mall setting, capable of:
 
-```
-from modules.utils import push_to_chroma
+- Interpreting user requests in everyday language.
+- Recommending five or more relevant shops or services per query.
+- Maintaining a coherent and helpful personality across a full conversation.
 
-push_to_chroma(data_path = './data/shops.json')
-```
+Potential deployment contexts include:
 
-### Send Queries
+- **Retail malls**: Shop locators, promotions, event info.
+- **Airports**: Lounge guidance, terminal services.
+- **Hospitals**: Department navigation and patient services.
+- **Expos and conventions**: Booth directories, session schedules.
 
-```
-from modules.engine import MallAssistant
+This project is highly adaptable and can be extended with voice interfaces, frontend UIs, or multi-language support.
 
-assistant = MallAssistant()
-assistant_response = assistant.get_response(user_query = "this is the user query")
-```
+## Technology and Skills Demonstrated
+
+This assistant is an end-to-end demonstration of professional AI system design and deployment readiness. The following technologies and skills are demonstrated:
+
+### Artificial Intelligence
+
+- OpenAI Embedding APIs for document encoding.
+- Prompt engineering and persona construction.
+- Vector-based information retrieval using semantic similarity.
+
+### Software Engineering
+
+- Modular Python codebase with clear separation of logic.
+- RESTful API development with FastAPI and Pydantic models.
+- Exception handling and system logging for production stability.
+
+### Backend Infrastructure
+
+- Local vector database management with **ChromaDB**.
+- Asynchronous file and request handling for scalability.
+- Threaded conversation state using **LangChain**'s memory model.
+
+## Requirements
+
+- Python 3.12+
+
+For setup and installation, install dependencies as listed in `requirements.txt`.
