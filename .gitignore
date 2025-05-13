@@ -1,3 +1,6 @@
+# Venv
+.lang_venv
+
 # Data
 data
 chromadb

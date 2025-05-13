@@ -28,6 +28,7 @@ class MallAssistant():
         graph (CompiledStateGraph): The compiled flow graph used to process queries 
             through retrieval, response generation, and history maintenance steps.
     """
+    # Initialize the models and the graph
     def __init__(self,
                  llm_model_name: str = 'gpt-4o-mini',
                  reranker_model_name: str = 'cross-encoder/ms-marco-MiniLM-L6-v2'):
@@ -56,6 +57,7 @@ class MallAssistant():
             logger.exception("Error during MallAssistant initialization.")
             raise
     
+    # Function to initialize the graph
     def _init_llm_graph(self,
                         prompt_template: PromptTemplate,
                         llm: ChatOpenAI,
@@ -77,14 +79,17 @@ class MallAssistant():
             CompiledStateGraph: The compiled flow graph for handling queries.
         """
         logger.info("Initializing LLM graph components.")
+        # Memory saver for conversational history
         memory = MemorySaver()
         
+        # State to maintain objects across graph
         class State(TypedDict):
             question: str
             messages: Annotated[list[AnyMessage], add]
             context: str
             answer: str
 
+        # Retreiving relevant stores with reranking
         def retrieve(state: State):
             """
             Retrieves relevant context documents for the user's question using similarity search 
@@ -100,10 +105,9 @@ class MallAssistant():
             try:
                 retrieved_docs = find_similar_shops(state['question'])
 
-                # Reranking
+                # Reranking (filters top 10 from the given 20)
                 pairs = [(state['question'], doc) for doc in retrieved_docs]
                 scores = reranker.predict(pairs)
-
                 sorted_docs = sorted(zip(scores, retrieved_docs), reverse=True)
                 relevant_shops = [doc[1] for doc in sorted_docs[:10]]
 
@@ -114,6 +118,7 @@ class MallAssistant():
                 logger.error(f"Error during context retrieval: {e}", exc_info=True)
                 return {"context": ""}
 
+        # Generates a response using conversation history and context
         def generate(state: State):
             """
             Generates an answer using the language model based on the question and retrieved context.
@@ -126,7 +131,7 @@ class MallAssistant():
             """
             logger.debug("Generating response based on context.")
             try:
-                # Ingesting conversation history
+                # Filter conversation history (last 3 or less exchanges)
                 history_str = messages_to_string(state['messages'][-6:]) if len(state['messages']) >= 6 else messages_to_string(state['messages'])
 
                 prompt = prompt_template.invoke({"question": state["question"], "history": history_str, "context": state['context']})
@@ -137,6 +142,7 @@ class MallAssistant():
                 logger.error(f"Error during response generation: {e}", exc_info=True)
                 return {"answer": "Sorry, I encountered an error while generating the response."}
         
+        # Maintaining conversational history
         def maintain_history(state: State):
             """
             Updates the conversation history with the latest question and answer.
@@ -167,6 +173,8 @@ class MallAssistant():
         
         return graph
     
+    # Used to process the user_query given thread_id
+        # thread_id is used to maintain chat history
     def process_user_query(self, 
                            user_query: str,
                            config: Dict):
@@ -188,6 +196,8 @@ class MallAssistant():
             ValueError: If "thread_id" is not provided in the config dictionary.
         """
         logger.info(f"Processing user query for thread_id: {config.get('thread_id', 'N/A')}")
+
+        # Throw error if 'thread_id' is missing
         if "thread_id" not in config:
             logger.error("Missing 'thread_id' in config.")
             raise ValueError('"thread_id" is required in the config to track conversation history.')

@@ -113,6 +113,7 @@ def messages_to_string(messages: list) -> str:
     Returns:
         str: A formatted string representation of the message list. Returns an empty string if no messages are provided.
     """
+    # Empty list
     if not messages: 
         logger.info("Received empty message list, returning empty string.")
         return ""
@@ -120,6 +121,7 @@ def messages_to_string(messages: list) -> str:
     logger.info(f"Formatting messages into string")
     lines = []
     
+    # Process one-by-one with 'isinstance'
     for message in messages:
         try:
             if isinstance(message, HumanMessage):
@@ -132,6 +134,7 @@ def messages_to_string(messages: list) -> str:
             logger.error(f"Error processing message: {e}")
             continue
     
+    # Join all strings from the list
     result = "\n".join(lines)
     logger.info(f"Messages formatted to string")
     return result

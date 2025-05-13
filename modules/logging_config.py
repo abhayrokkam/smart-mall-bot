@@ -14,9 +14,11 @@ def setup_logger(name: str = None) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(LOG_LEVEL)
 
-    if not logger.handlers:  
+    if not logger.handlers:
+        # Logging format  
         formatter = logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT)
 
+        # File Handler
         file_handler = RotatingFileHandler(
             filename=LOG_FILENAME,
             maxBytes=5 * 1024 * 1024,
@@ -25,10 +27,12 @@ def setup_logger(name: str = None) -> logging.Logger:
         file_handler.setLevel(LOG_LEVEL)
         file_handler.setFormatter(formatter)
 
+        # Console Handler
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.WARNING)
         console_handler.setFormatter(formatter)
 
+        # Adding both
         logger.addHandler(file_handler)
         logger.addHandler(console_handler)
 
